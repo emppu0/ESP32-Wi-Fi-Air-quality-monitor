@@ -1,16 +1,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include "password.h"
+//#include "password_example.h"
 
+#include <Wire.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-
-// Replace with your network credentials
-const char* ssid     = "";
-const char* password = "";
-
-const char* serverName = "";
-String apiKeyValue = ""; //api key
 
 unsigned long httppost_update_interval = 600000; 
 unsigned long sensors_update_interval = 60000;
