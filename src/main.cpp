@@ -8,51 +8,51 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-unsigned long httppost_update_interval = 600000; 
+unsigned long httppost_update_interval = 600000;
 unsigned long sensors_update_interval = 60000;
 unsigned long time_now = 0;
 unsigned long time_now2 = 0;
 
-#define READINGS 10 //how many sensor readings
+#define READINGS 10 // how many sensor readings
 
 float temp;
-float temp_readings_arr[READINGS];     // the readings from temperature sensor
-uint16_t temp_read_index = 0;          //index of the current reading
-float temp_avg = 0;                   //temp avg
-float temp_total;                    //running total
+float temp_readings_arr[READINGS]; // the readings from temperature sensor
+uint16_t temp_read_index = 0;      // index of the current reading
+float temp_avg = 0;                // temp avg
+float temp_total;                  // running total
 
-float tvoc = 0; //total volatile organic compounds
-float tvoc_readings_arr[READINGS];    // the readings from gas sensor
-int tvoc_read_index = 0;              //index of the current reading
-float tvoc_avg = 0;                   //tvoc avg
-float tvoc_total;                    //running total
+float tvoc = 0;                    // total volatile organic compounds
+float tvoc_readings_arr[READINGS]; // the readings from gas sensor
+int tvoc_read_index = 0;           // index of the current reading
+float tvoc_avg = 0;                // tvoc avg
+float tvoc_total;                  // running total
 bool SGP30_ok = false;
 
-const int oneWireBus = 18;  //input pin for ds18b20, tempsens1
+const int oneWireBus = 18; // input pin for ds18b20, tempsens1
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
-#define SENSOR_RESOLUTION 12 //sensor resolution
+#define SENSOR_RESOLUTION 12 // sensor resolution
 
-SGP30 mySensor; //create an object of the SGP30 class
+SGP30 mySensor; // create an object of the SGP30 class
 
 void setup()
 {
-  pinMode(25, OUTPUT); //status led blue
-  pinMode(26, OUTPUT); //status led red
-  pinMode(27, OUTPUT); //status led green
+  pinMode(25, OUTPUT); // status led blue
+  pinMode(26, OUTPUT); // status led red
+  pinMode(27, OUTPUT); // status led green
   Wire.begin();
 
-  Serial.begin(9600); //serial for debug
-  
+  Serial.begin(9600); // serial for debug
+
   WiFi.begin(ssid, password);
   Serial.println("Connecting");
   delay(1000);
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print("Wrong ssid or password");
   }
-  
-  
+
   Serial.print("Connected to WiFi network with IP Address: ");
   digitalWrite(27, HIGH);
   delay(4000);
@@ -63,7 +63,8 @@ void setup()
   temp = sensors.getTempCByIndex(0);
   temp_total = temp * READINGS;
 
-  for (int i = 0; i < READINGS; i++) { //initialize array with current sensor value
+  for (int i = 0; i < READINGS; i++)
+  { // initialize array with current sensor value
     temp_readings_arr[i] = temp;
   }
 
@@ -74,19 +75,20 @@ void setup()
 
     tvoc_total = tvoc * READINGS;
 
-    for (int i = 0; i < READINGS; i++) { 
+    for (int i = 0; i < READINGS; i++)
+    {
       tvoc_readings_arr[i] = tvoc;
     }
     SGP30_ok = true;
   }
-
 }
 
-void loop() {
+void loop()
+{
 
   if ((unsigned long)(millis() - time_now) > sensors_update_interval)
   {
-    
+
     time_now = millis();
 
     sensors.requestTemperatures();
@@ -96,7 +98,8 @@ void loop() {
     temp_total = temp_total + temp_readings_arr[temp_read_index];
     temp_read_index = temp_read_index + 1;
 
-    if (temp_read_index >= READINGS) {
+    if (temp_read_index >= READINGS)
+    {
       temp_read_index = 0;
     }
 
@@ -112,7 +115,8 @@ void loop() {
       tvoc_total = tvoc_total + tvoc_readings_arr[tvoc_read_index];
       tvoc_read_index = tvoc_read_index + 1;
 
-      if (tvoc_read_index >= READINGS) {
+      if (tvoc_read_index >= READINGS)
+      {
         tvoc_read_index = 0;
       }
 
@@ -120,51 +124,57 @@ void loop() {
       tvoc_avg = tvoc_total / READINGS;
     }
 
-
-    //debug
+    // debug
     Serial.print("Current Temperature: ");
     Serial.println(temp);
     Serial.print("AVG Temperature: ");
     Serial.println(temp_avg);
+
+    Serial.print("Current Tvoc: ");
+    Serial.println(tvoc);
+    Serial.print("AVG Tvoc: ");
+    Serial.println(tvoc_avg);
     delay(1000);
-  
-   
+    
   }
 
   if ((unsigned long)(millis() - time_now2) > httppost_update_interval)
   {
-    //Check WiFi connection status
-    if (WiFi.status() == WL_CONNECTED) {
-      
+    // Check WiFi connection status
+    if (WiFi.status() == WL_CONNECTED)
+    {
+
       WiFiClient client;
       HTTPClient http;
       digitalWrite(25, HIGH);
-      
-      //Domain name with URL path or IP address with path
+
+      // Domain name with URL path or IP address with path
       http.begin(client, serverName);
 
-      //Specify content-type header
+      // Specify content-type header
       http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-      //Prepare HTTP POST request data
-            String httpRequestData = "api_key=" + apiKeyValue + "&value1=" + String(temp_avg)
-                               + "&value2=" + String(tvoc_avg) + "";
+      // Prepare HTTP POST request data
+      String httpRequestData = "api_key=" + apiKeyValue + "&value1=" + String(temp_avg) + "&value2=" + String(tvoc_avg) + "";
 
-      //Send HTTP POST request
+      // Send HTTP POST request
       int httpResponseCode = http.POST(httpRequestData);
 
-      if (httpResponseCode > 0) {
+      if (httpResponseCode > 0)
+      {
         Serial.print("HTTP Response code: ");
         Serial.println(httpResponseCode);
       }
-      else {
+      else
+      {
         Serial.print("Error code: ");
         Serial.println(httpResponseCode);
       }
       // Free resources
       http.end();
     }
-    else {
+    else
+    {
       Serial.println("WiFi Disconnected");
     }
 
