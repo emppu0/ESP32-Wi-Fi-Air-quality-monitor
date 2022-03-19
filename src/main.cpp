@@ -9,9 +9,9 @@
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
 
-#define READINGS 10               // how many sensor readings
+#define READINGS 2               // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP 60         // Sleep time 
+#define TIME_TO_SLEEP 1         // Sleep time 
 
 uint8_t index1 = 0;
 float temp;
@@ -44,8 +44,11 @@ bool SGP30_ok = false;
 SGP30 SGP30_1; // create an object of the SGP30 class
 SCD4x SCD40;   // create an object of the SCD4x class
 
+
+
 void Network()
 {
+    //WiFi.disconnect(true);
     WiFi.begin(ssid, password);
 
     delay(1000);
@@ -54,8 +57,6 @@ void Network()
       Serial.print("...");
       delay(1000);
     }
-
-
 
     Serial.print("Connected to:");
     Serial.println(WiFi.localIP());
@@ -126,6 +127,7 @@ void loop()
   Serial.println("I go to sleep now");
   Serial.flush();
   delay(100);
+  delay(2000);
   esp_light_sleep_start();
   
 
@@ -194,7 +196,17 @@ void loop()
 
   if (index1 >= READINGS)
   {
-    Network();
+    //Network(); //does not work
+    WiFi.reconnect();
+    delay(1000);
+    while(WiFi.status() != WL_CONNECTED)
+    {
+      Serial.print("...");
+      delay(1000);
+    }
+
+    Serial.print("Connected to:");
+    Serial.println(WiFi.localIP());
     if (WiFi.status() == WL_CONNECTED)
     {
 
@@ -229,10 +241,10 @@ void loop()
       }
       // Free resources
       http.end();
-      // WiFi.disconnect();
-      digitalWrite(25, LOW);
       
+      digitalWrite(25, LOW);
     }
     index1 = 0;
+    
   }
 }
