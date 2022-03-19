@@ -6,49 +6,60 @@
 #include "SparkFun_SGP30_Arduino_Library.h"
 #include "SparkFun_SCD4x_Arduino_Library.h"
 #include <Wire.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
-unsigned long httppost_update_interval = 600000; // should be 600000
-unsigned long sensors_update_interval = 60000;   // should be 60000
-unsigned long time_now = 0;
-unsigned long time_now2 = 0;
+//#include <OneWire.h>
+//#include <DallasTemperature.h>
 
 #define READINGS 10               // how many sensor readings
-#define uS_TO_S_FACTOR 1000000ULL /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 3           /* Time ESP32 will go to sleep (in seconds) */
+#define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
+#define TIME_TO_SLEEP 60         // Sleep time 
 
-uint16_t counter = 0;
-uint16_t index1 = 0; // korvaa kaikki yhdellä muuttujalla
+uint8_t index1 = 0;
 float temp;
-float temp_readings_arr[READINGS]; // the readings from temperature sensor
-float temp_avg = 0;                // temp avg
-float temp_total;                  // running total
+float temp_readings_arr[READINGS]; 
+float temp_avg = 0;                
+float temp_total;                  
 
 float humi;
-float humi_readings_arr[READINGS]; // the readings from temperature sensor
-float humi_avg = 0;                // temp avg
-float humi_total;                  // running total
+float humi_readings_arr[READINGS]; 
+float humi_avg = 0;                
+float humi_total;                  
 
-uint16_t co2 = 0;                    // total volatile organic compounds
-uint16_t co2_readings_arr[READINGS]; // the readings from gas sensor
-uint16_t co2_avg = 0;                // tvoc avg
-uint16_t co2_total;                  // running total
+uint16_t co2 = 0;                    
+uint16_t co2_readings_arr[READINGS]; 
+uint16_t co2_avg = 0;                
+uint16_t co2_total;                  
 
-uint16_t tvoc = 0;                    // total volatile organic compounds
-uint16_t tvoc_readings_arr[READINGS]; // the readings from gas sensor
-uint16_t tvoc_read_index = 0;         // index of the current reading
-uint16_t tvoc_avg = 0;                // tvoc avg
-uint16_t tvoc_total;                  // running total
+int16_t tvoc = -100;                  
+uint16_t tvoc_readings_arr[READINGS]; 
+uint16_t tvoc_read_index = 0;         
+uint16_t tvoc_avg = 0;                
+uint16_t tvoc_total;                  
 bool SGP30_ok = false;
 
-const int oneWireBus = 18; // input pin for ds18b20, tempsens1
-OneWire oneWire(oneWireBus);
-DallasTemperature sensors(&oneWire);
-#define SENSOR_RESOLUTION 12 // sensor resolution
+//const int oneWireBus = 18; // input pin for ds18b20, tempsens1
+//OneWire oneWire(oneWireBus);
+//DallasTemperature sensors(&oneWire);
+//#define SENSOR_RESOLUTION 12 // sensor resolution
 
-SGP30 SGP30_1;  // create an object of the SGP30 class
-SCD4x SCD40; // create an object of the SCD4x class
+SGP30 SGP30_1; // create an object of the SGP30 class
+SCD4x SCD40;   // create an object of the SCD4x class
+
+void Network()
+{
+    WiFi.begin(ssid, password);
+
+    delay(1000);
+    while(WiFi.status() != WL_CONNECTED)
+    {
+      Serial.print("...");
+      delay(1000);
+    }
+
+
+
+    Serial.print("Connected to:");
+    Serial.println(WiFi.localIP());
+}
 
 void setup()
 {
@@ -56,6 +67,7 @@ void setup()
   pinMode(26, OUTPUT); // status led red
   pinMode(27, OUTPUT); // status led green
   Wire.begin();
+  Network();
 
   Serial.begin(9600); // serial for debug
 
@@ -70,10 +82,21 @@ void setup()
     while (1)
       ;
   }
-  delay(5000);
+
+  SCD40.stopPeriodicMeasurement(); //stpo periodic measurements
+  SCD40.startLowPowerPeriodicMeasurement(); //Enable low power periodic measurements
+  delay(310);
 
   SCD40.readMeasurement();
   {
+    if (SGP30_1.begin())
+    {
+      SGP30_1.initAirQuality();
+      tvoc = SGP30_1.TVOC;
+      tvoc_total = tvoc * READINGS;
+      SGP30_ok = true;
+    }
+
     temp = SCD40.getTemperature();
     temp_total = temp * READINGS;
     humi = SCD40.getHumidity();
@@ -88,22 +111,12 @@ void setup()
       temp_readings_arr[i] = temp;
       humi_readings_arr[i] = humi;
       co2_readings_arr[i] = co2;
-    }
-  }
-
-  if (SGP30_1.begin())
-  {
-    SGP30_1.initAirQuality();
-    tvoc = SGP30_1.TVOC;
-
-    tvoc_total = tvoc * READINGS;
-
-    for (int i = 0; i < READINGS; i++)
-    {
       tvoc_readings_arr[i] = tvoc;
     }
-    SGP30_ok = true;
   }
+
+
+
 }
 
 void loop()
@@ -112,8 +125,11 @@ void loop()
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   Serial.println("I go to sleep now");
   Serial.flush();
+  delay(100);
   esp_light_sleep_start();
-  Serial.println("You woke my up");
+  
+
+  Serial.println("You woke me up");
 
   // sensors.requestTemperatures();
   // temp = sensors.getTempCByIndex(0);
@@ -124,40 +140,35 @@ void loop()
     humi = SCD40.getHumidity();
     co2 = SCD40.getCO2();
 
-    temp_total = temp_total - temp_readings_arr[index1];
-    temp_readings_arr[index1] = temp;
-    temp_total = temp_total + temp_readings_arr[index1];
-    humi_total = humi_total - humi_readings_arr[index1];
-    humi_readings_arr[index1] = humi;
-    humi_total = humi_total + humi_readings_arr[index1];
-    co2_total = co2_total - co2_readings_arr[index1];
-    co2_readings_arr[index1] = co2;
-    co2_total = co2_total + co2_readings_arr[index1];
-    index1++;
-
-    // calculate temperature avg:
-    temp_avg = temp_total / READINGS;
-    humi_avg = humi_total / READINGS;
-    co2_avg = co2_total / READINGS;
-  }
-
-  if (SGP30_ok)
-  {
-    SGP30_1.measureAirQuality();
-    tvoc = SGP30_1.TVOC;
-    tvoc_total = tvoc_total - tvoc_readings_arr[tvoc_read_index];
-    tvoc_readings_arr[tvoc_read_index] = tvoc;
-    tvoc_total = tvoc_total + tvoc_readings_arr[tvoc_read_index];
-    tvoc_read_index = tvoc_read_index + 1;
-
-    if (tvoc_read_index >= READINGS)
+    if (SGP30_ok)
     {
-      tvoc_read_index = 0;
-    }
+      SGP30_1.measureAirQuality();
+      tvoc = SGP30_1.TVOC;
+      tvoc_total = tvoc_total - tvoc_readings_arr[index1];
+      tvoc_readings_arr[index1] = tvoc;
+      tvoc_total = tvoc_total + tvoc_readings_arr[index1];
 
-    // calculate humidity avg:
-    tvoc_avg = tvoc_total / READINGS;
+      // calculate humidity avg:
+      tvoc_avg = tvoc_total / READINGS;
+    }
   }
+
+  temp_total = temp_total - temp_readings_arr[index1];
+  temp_readings_arr[index1] = temp;
+  temp_total = temp_total + temp_readings_arr[index1];
+  humi_total = humi_total - humi_readings_arr[index1];
+  humi_readings_arr[index1] = humi;
+  humi_total = humi_total + humi_readings_arr[index1];
+  co2_total = co2_total - co2_readings_arr[index1];
+  co2_readings_arr[index1] = co2;
+  co2_total = co2_total + co2_readings_arr[index1];
+  index1++;
+
+  // calculate avg:
+  temp_avg = temp_total / READINGS;
+  humi_avg = humi_total / READINGS;
+  co2_avg = co2_total / READINGS;
+
 
   // debug
   Serial.print("Current Temperature: ");
@@ -179,13 +190,12 @@ void loop()
   Serial.println(co2);
   Serial.print("AVG co2: ");
   Serial.println(co2_avg);
-  delay(1000);
+  
 
-  if (index1 >= READINGS) //(unsigned long)(millis() - time_now2) > httppost_update_interval
+  if (index1 >= READINGS)
   {
-    WiFi.begin(ssid, password);
-    delay(5000);
-    if (WL_CONNECTED)
+    Network();
+    if (WiFi.status() == WL_CONNECTED)
     {
 
       // Check WiFi connection status
@@ -220,12 +230,9 @@ void loop()
       // Free resources
       http.end();
       // WiFi.disconnect();
-
-      time_now2 = millis();
       digitalWrite(25, LOW);
-      index1 = 0;
+      
     }
+    index1 = 0;
   }
-
-  delay(10);
 }
