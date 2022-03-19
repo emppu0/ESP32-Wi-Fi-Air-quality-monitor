@@ -44,22 +44,25 @@ bool SGP30_ok = false;
 SGP30 SGP30_1; // create an object of the SGP30 class
 SCD4x SCD40;   // create an object of the SCD4x class
 
-
-
 void Network()
 {
-    //WiFi.disconnect(true);
+    WiFi.disconnect(true, true); //delete AP before connecting again
+    delay(1000);
     WiFi.begin(ssid, password);
 
+    //WiFi.onEvent(Wifi_connected,SYSTEM_EVENT_STA_CONNECTED);
+    //WiFi.onEvent(Get_IPAddress, SYSTEM_EVENT_STA_GOT_IP);
+    //WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED); 
+ 
     delay(1000);
     while(WiFi.status() != WL_CONNECTED)
     {
       Serial.print("...");
       delay(1000);
     }
-
     Serial.print("Connected to:");
     Serial.println(WiFi.localIP());
+    delay(1000);
 }
 
 void setup()
@@ -173,6 +176,7 @@ void loop()
 
 
   // debug
+  /*
   Serial.print("Current Temperature: ");
   Serial.println(temp);
   Serial.print("AVG Temperature: ");
@@ -192,21 +196,13 @@ void loop()
   Serial.println(co2);
   Serial.print("AVG co2: ");
   Serial.println(co2_avg);
-  
+  */
 
   if (index1 >= READINGS)
   {
-    //Network(); //does not work
-    WiFi.reconnect();
-    delay(1000);
-    while(WiFi.status() != WL_CONNECTED)
-    {
-      Serial.print("...");
-      delay(1000);
-    }
-
-    Serial.print("Connected to:");
-    Serial.println(WiFi.localIP());
+    Network(); //does not work
+    //Serial.print("Connected to:");
+    //Serial.println(WiFi.localIP());
     if (WiFi.status() == WL_CONNECTED)
     {
 
