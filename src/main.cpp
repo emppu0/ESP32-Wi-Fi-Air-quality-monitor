@@ -230,9 +230,9 @@ void loop()
       // Free resources
       http.end();
       // WiFi.disconnect();
-      
       digitalWrite(25, LOW);
-      index1 = 0;
+      
     }
+    index1 = 0;
   }
 }
