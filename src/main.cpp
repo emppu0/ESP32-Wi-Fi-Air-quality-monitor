@@ -2,16 +2,17 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "password.h"
-//#include "password_example.h" //uncomment this and comment the above line
 #include "SparkFun_SGP30_Arduino_Library.h"
 #include "SparkFun_SCD4x_Arduino_Library.h"
 #include <Wire.h>
+#include "password.h"
+//#include "password_example.h" //uncomment this and comment the above line
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
 
-#define READINGS 2               // how many sensor readings
+#define READINGS 10               // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP 1         // Sleep time 
+#define TIME_TO_SLEEP 60         // Sleep time 
 
 uint8_t index1 = 0;
 float temp;
@@ -89,7 +90,7 @@ void setup()
 
   SCD40.stopPeriodicMeasurement(); //stpo periodic measurements
   SCD40.startLowPowerPeriodicMeasurement(); //Enable low power periodic measurements
-  delay(310);
+  delay(31000); //wait for measurements
 
   SCD40.readMeasurement();
   {
@@ -127,14 +128,9 @@ void loop()
 {
 
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  Serial.println("I go to sleep now");
   Serial.flush();
-  delay(100);
   delay(2000);
   esp_light_sleep_start();
-  
-
-  Serial.println("You woke me up");
 
   // sensors.requestTemperatures();
   // temp = sensors.getTempCByIndex(0);
@@ -174,35 +170,10 @@ void loop()
   humi_avg = humi_total / READINGS;
   co2_avg = co2_total / READINGS;
 
-
-  // debug
-  /*
-  Serial.print("Current Temperature: ");
-  Serial.println(temp);
-  Serial.print("AVG Temperature: ");
-  Serial.println(temp_avg);
-
-  Serial.print("Current Tvoc: ");
-  Serial.println(tvoc);
-  Serial.print("AVG Tvoc: ");
-  Serial.println(tvoc_avg);
-
-  Serial.print("Current Humidity: ");
-  Serial.println(humi);
-  Serial.print("AVG humidity: ");
-  Serial.println(humi_avg);
-
-  Serial.print("Current co2: ");
-  Serial.println(co2);
-  Serial.print("AVG co2: ");
-  Serial.println(co2_avg);
-  */
-
   if (index1 >= READINGS)
   {
-    Network(); //does not work
-    //Serial.print("Connected to:");
-    //Serial.println(WiFi.localIP());
+    Network(); //connect to wifi after sleep
+  
     if (WiFi.status() == WL_CONNECTED)
     {
 
@@ -220,7 +191,9 @@ void loop()
 
       // Prepare HTTP POST data
 
-      String httpRequestData = "api_key=" + apiKeyValue + "&value1=" + String(temp_avg) + "&value2=" + String(humi_avg) + "&value3=" + String(co2_avg) + "&value4=" + String(tvoc_avg) + "";
+      //String httpRequestData = "api_key=" + apiKeyValue + "temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(tvoc_avg) + "";
+      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temp_avg)
+       + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) +  "&tvoc=" + String(tvoc_avg) + "";
 
       // Send HTTP POST request
       int httpResponseCode = http.POST(httpRequestData);
