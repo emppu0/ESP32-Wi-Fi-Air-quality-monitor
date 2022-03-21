@@ -12,34 +12,33 @@
 
 #define READINGS 10               // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP 60         // Sleep time 
+#define TIME_TO_SLEEP 60          // Sleep time
 
 uint8_t index1 = 0;
 float temp;
-float temp_readings_arr[READINGS]; 
-float temp_avg = 0;                
-float temp_total;                  
+float temp_readings_arr[READINGS];
+float temp_avg = 0;
+float temp_total;
 
 float humi;
-float humi_readings_arr[READINGS]; 
-float humi_avg = 0;                
-float humi_total;                  
+float humi_readings_arr[READINGS];
+float humi_avg = 0;
+float humi_total;
 
-uint16_t co2 = 0;                    
-uint16_t co2_readings_arr[READINGS]; 
-uint16_t co2_avg = 0;                
-uint16_t co2_total;                  
+uint16_t co2 = 0;
+uint16_t co2_readings_arr[READINGS];
+uint16_t co2_avg = 0;
+uint32_t co2_total;
 
-int16_t tvoc = -100;                  
-uint16_t tvoc_readings_arr[READINGS]; 
-uint16_t tvoc_read_index = 0;         
-uint16_t tvoc_avg = 0;                
-uint16_t tvoc_total;                  
+uint16_t tvoc_readings_arr[READINGS];
+uint16_t tvoc_read_index = 0;
+uint16_t tvoc_avg = 0;
+uint16_t tvoc_total;
 bool SGP30_ok = false;
 
-//const int oneWireBus = 18; // input pin for ds18b20, tempsens1
-//OneWire oneWire(oneWireBus);
-//DallasTemperature sensors(&oneWire);
+// const int oneWireBus = 18; // input pin for ds18b20, tempsens1
+// OneWire oneWire(oneWireBus);
+// DallasTemperature sensors(&oneWire);
 //#define SENSOR_RESOLUTION 12 // sensor resolution
 
 SGP30 SGP30_1; // create an object of the SGP30 class
@@ -47,23 +46,23 @@ SCD4x SCD40;   // create an object of the SCD4x class
 
 void Network()
 {
-    WiFi.disconnect(true, true); //delete AP before connecting again
-    delay(1000);
-    WiFi.begin(ssid, password);
+  WiFi.disconnect(true, true); // delete AP before connecting again
+  delay(1000);
+  WiFi.begin(ssid, password);
 
-    //WiFi.onEvent(Wifi_connected,SYSTEM_EVENT_STA_CONNECTED);
-    //WiFi.onEvent(Get_IPAddress, SYSTEM_EVENT_STA_GOT_IP);
-    //WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED); 
- 
+  // WiFi.onEvent(Wifi_connected,SYSTEM_EVENT_STA_CONNECTED);
+  // WiFi.onEvent(Get_IPAddress, SYSTEM_EVENT_STA_GOT_IP);
+  // WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED);
+
+  delay(1000);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print("...");
     delay(1000);
-    while(WiFi.status() != WL_CONNECTED)
-    {
-      Serial.print("...");
-      delay(1000);
-    }
-    Serial.print("Connected to:");
-    Serial.println(WiFi.localIP());
-    delay(1000);
+  }
+  Serial.print("Connected to:");
+  Serial.println(WiFi.localIP());
+  delay(1000);
 }
 
 void setup()
@@ -88,17 +87,16 @@ void setup()
       ;
   }
 
-  SCD40.stopPeriodicMeasurement(); //stpo periodic measurements
-  SCD40.startLowPowerPeriodicMeasurement(); //Enable low power periodic measurements
-  delay(31000); //wait for measurements
+  SCD40.stopPeriodicMeasurement();          // stop periodic measurements
+  SCD40.startLowPowerPeriodicMeasurement(); // Enable low power periodic measurements
+  delay(31000);                             // wait for measurements
 
   SCD40.readMeasurement();
   {
     if (SGP30_1.begin())
     {
       SGP30_1.initAirQuality();
-      tvoc = SGP30_1.TVOC;
-      tvoc_total = tvoc * READINGS;
+      tvoc_total = SGP30_1.TVOC * READINGS;
       SGP30_ok = true;
     }
 
@@ -108,20 +106,15 @@ void setup()
     humi_total = humi * READINGS;
     co2 = SCD40.getCO2();
     co2_total = co2 * READINGS;
-    co2 = SCD40.getCO2();
-    co2_total = co2 * READINGS;
 
     for (int i = 0; i < READINGS; i++)
     { // initialize arrays with current sensor values
       temp_readings_arr[i] = temp;
       humi_readings_arr[i] = humi;
       co2_readings_arr[i] = co2;
-      tvoc_readings_arr[i] = tvoc;
+      tvoc_readings_arr[i] = 0;
     }
   }
-
-
-
 }
 
 void loop()
@@ -137,17 +130,12 @@ void loop()
   SCD40.readMeasurement();
   {
 
-    temp = SCD40.getTemperature();
-    humi = SCD40.getHumidity();
-    co2 = SCD40.getCO2();
-
     if (SGP30_ok)
     {
       SGP30_1.measureAirQuality();
-      tvoc = SGP30_1.TVOC;
-      tvoc_total = tvoc_total - tvoc_readings_arr[index1];
-      tvoc_readings_arr[index1] = tvoc;
-      tvoc_total = tvoc_total + tvoc_readings_arr[index1];
+      tvoc_total = tvoc_total - tvoc_readings_arr[index1]; // substract the last reading
+      tvoc_readings_arr[index1] = SGP30_1.TVOC;            // read sensor
+      tvoc_total = tvoc_total + tvoc_readings_arr[index1]; // add the reading to the total
 
       // calculate humidity avg:
       tvoc_avg = tvoc_total / READINGS;
@@ -155,14 +143,24 @@ void loop()
   }
 
   temp_total = temp_total - temp_readings_arr[index1];
-  temp_readings_arr[index1] = temp;
+  temp_readings_arr[index1] = SCD40.getTemperature();
   temp_total = temp_total + temp_readings_arr[index1];
+
   humi_total = humi_total - humi_readings_arr[index1];
-  humi_readings_arr[index1] = humi;
+  humi_readings_arr[index1] = SCD40.getHumidity();
   humi_total = humi_total + humi_readings_arr[index1];
+
+  co2 = (uint16_t)SCD40.getCO2();
+
+  if (co2 >= 10000) //if co2 is over 10k round it to 10k to prevent variable overflow
+  {
+    co2 = 10000;
+  }
+
   co2_total = co2_total - co2_readings_arr[index1];
   co2_readings_arr[index1] = co2;
   co2_total = co2_total + co2_readings_arr[index1];
+
   index1++;
 
   // calculate avg:
@@ -172,12 +170,11 @@ void loop()
 
   if (index1 >= READINGS)
   {
-    Network(); //connect to wifi after sleep
-  
+    Network(); // connect to wifi after sleep
+
+    // Check WiFi connection status
     if (WiFi.status() == WL_CONNECTED)
     {
-
-      // Check WiFi connection status
 
       WiFiClient client;
       HTTPClient http;
@@ -191,9 +188,8 @@ void loop()
 
       // Prepare HTTP POST data
 
-      //String httpRequestData = "api_key=" + apiKeyValue + "temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(tvoc_avg) + "";
-      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temp_avg)
-       + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) +  "&tvoc=" + String(tvoc_avg) + "";
+      // String httpRequestData = "api_key=" + apiKeyValue + "temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(tvoc_avg) + "";
+      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(tvoc_avg) + "";
 
       // Send HTTP POST request
       int httpResponseCode = http.POST(httpRequestData);
@@ -210,10 +206,9 @@ void loop()
       }
       // Free resources
       http.end();
-      
+
       digitalWrite(25, LOW);
     }
     index1 = 0;
-    
   }
 }
