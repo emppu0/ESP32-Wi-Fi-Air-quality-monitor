@@ -3,14 +3,15 @@
 #include <HTTPClient.h>
 #include "password.h"
 #include "SparkFun_SGP30_Arduino_Library.h"
-#include "SparkFun_SCD4x_Arduino_Library.h"
+#include "SensirionI2CScd4x.h"
+
 #include <Wire.h>
 #include "password.h"
 //#include "password_example.h" //uncomment this and comment the above line
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
 
-#define READINGS 10               // how many sensor readings
+#define READINGS 10                // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP 60          // Sleep time
 
@@ -28,13 +29,14 @@ float humi_total;
 uint16_t co2 = 0;
 uint16_t co2_readings_arr[READINGS];
 uint16_t co2_avg = 0;
-uint32_t co2_total;
+uint16_t co2_total;
 
 uint16_t tvoc_readings_arr[READINGS];
 uint16_t tvoc_read_index = 0;
 uint16_t tvoc_avg = 0;
 uint16_t tvoc_total;
 bool SGP30_ok = false;
+uint16_t error;
 
 // const int oneWireBus = 18; // input pin for ds18b20, tempsens1
 // OneWire oneWire(oneWireBus);
@@ -42,7 +44,7 @@ bool SGP30_ok = false;
 //#define SENSOR_RESOLUTION 12 // sensor resolution
 
 SGP30 SGP30_1; // create an object of the SGP30 class
-SCD4x SCD40;   // create an object of the SCD4x class
+SensirionI2CScd4x scd4x;
 
 void Network()
 {
@@ -70,51 +72,67 @@ void setup()
   pinMode(25, OUTPUT); // status led blue
   pinMode(26, OUTPUT); // status led red
   pinMode(27, OUTPUT); // status led green
+
   Wire.begin();
   Network();
-
   Serial.begin(9600); // serial for debug
+  scd4x.begin(Wire);
+
+  // stop potentially previously started measurement
+  error = scd4x.stopPeriodicMeasurement();
+  if (error)
+  {
+    Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+  }
+
+  uint16_t serial0;
+  uint16_t serial1;
+  uint16_t serial2;
+
+  error = scd4x.getSerialNumber(serial0, serial1, serial2);
+  while (error)
+  {
+    Serial.print("Error trying to execute getSerialNumber(): ");
+    Serial.println(error);
+    delay(1000);
+  }
+  
+  //error = scd4x.startLowPowerPeriodicMeasurement();
+  error = scd4x.startPeriodicMeasurement();
+  delay(310); // wait for measurements
+  // sensors.requestTemperatures();
+  // temp = sensors.getTempCByIndex(0);
+
+  error = scd4x.readMeasurement(co2, temp, humi);
+
+  while (error)
+  {
+    Serial.println("SCD4x error");
+    delay(1000);
+  }
+
+  if (SGP30_1.begin())
+  {
+    SGP30_1.initAirQuality();
+    tvoc_total = SGP30_1.TVOC * READINGS;
+    SGP30_ok = true;
+  }
+
+  temp_total = temp * READINGS;
+  humi_total = humi * READINGS;
+  co2_total = co2 * READINGS;
+
+  for (int i = 0; i < READINGS; i++)
+  { // initialize arrays with current sensor values
+    temp_readings_arr[i] = temp;
+    humi_readings_arr[i] = humi;
+    co2_readings_arr[i] = co2;
+    tvoc_readings_arr[i] = 0;
+  }
 
   digitalWrite(27, HIGH);
   delay(4000);
   digitalWrite(27, LOW);
-
-  // sensors.requestTemperatures();
-  // temp = sensors.getTempCByIndex(0);
-  if (SCD40.begin() == false)
-  {
-    while (1)
-      ;
-  }
-
-  SCD40.stopPeriodicMeasurement();          // stop periodic measurements
-  SCD40.startLowPowerPeriodicMeasurement(); // Enable low power periodic measurements
-  delay(31000);                             // wait for measurements
-
-  SCD40.readMeasurement();
-  {
-    if (SGP30_1.begin())
-    {
-      SGP30_1.initAirQuality();
-      tvoc_total = SGP30_1.TVOC * READINGS;
-      SGP30_ok = true;
-    }
-
-    temp = SCD40.getTemperature();
-    temp_total = temp * READINGS;
-    humi = SCD40.getHumidity();
-    humi_total = humi * READINGS;
-    co2 = SCD40.getCO2();
-    co2_total = co2 * READINGS;
-
-    for (int i = 0; i < READINGS; i++)
-    { // initialize arrays with current sensor values
-      temp_readings_arr[i] = temp;
-      humi_readings_arr[i] = humi;
-      co2_readings_arr[i] = co2;
-      tvoc_readings_arr[i] = 0;
-    }
-  }
 }
 
 void loop()
@@ -127,35 +145,31 @@ void loop()
 
   // sensors.requestTemperatures();
   // temp = sensors.getTempCByIndex(0);
-  SCD40.readMeasurement();
+  error = scd4x.readMeasurement(co2, temp, humi);
+
+  while (error)
   {
+    Serial.println("SCD4x error");
+  }
 
-    if (SGP30_ok)
-    {
-      SGP30_1.measureAirQuality();
-      tvoc_total = tvoc_total - tvoc_readings_arr[index1]; // substract the last reading
-      tvoc_readings_arr[index1] = SGP30_1.TVOC;            // read sensor
-      tvoc_total = tvoc_total + tvoc_readings_arr[index1]; // add the reading to the total
+  if (SGP30_ok)
+  {
+    SGP30_1.measureAirQuality();
+    tvoc_total = tvoc_total - tvoc_readings_arr[index1]; // substract the last reading
+    tvoc_readings_arr[index1] = SGP30_1.TVOC;            // read sensor
+    tvoc_total = tvoc_total + tvoc_readings_arr[index1]; // add the reading to the total
 
-      // calculate humidity avg:
-      tvoc_avg = tvoc_total / READINGS;
-    }
+    // calculate humidity avg:
+    tvoc_avg = tvoc_total / READINGS;
   }
 
   temp_total = temp_total - temp_readings_arr[index1];
-  temp_readings_arr[index1] = SCD40.getTemperature();
+  temp_readings_arr[index1] = temp;
   temp_total = temp_total + temp_readings_arr[index1];
 
   humi_total = humi_total - humi_readings_arr[index1];
-  humi_readings_arr[index1] = SCD40.getHumidity();
+  humi_readings_arr[index1] = humi;
   humi_total = humi_total + humi_readings_arr[index1];
-
-  co2 = (uint16_t)SCD40.getCO2();
-
-  if (co2 >= 10000) //if co2 is over 10k round it to 10k to prevent variable overflow
-  {
-    co2 = 10000;
-  }
 
   co2_total = co2_total - co2_readings_arr[index1];
   co2_readings_arr[index1] = co2;
@@ -167,6 +181,23 @@ void loop()
   temp_avg = temp_total / READINGS;
   humi_avg = humi_total / READINGS;
   co2_avg = co2_total / READINGS;
+
+  Serial.println("........................");
+  Serial.print("Curr temp:");
+  Serial.println(temp);
+  Serial.print("Avg temp:");
+  Serial.println(temp_avg);
+  Serial.println("........................");
+  Serial.print("Curr humi:");
+  Serial.println(humi);
+  Serial.print("Avg humi:");
+  Serial.println(humi_avg);
+  Serial.println("........................");
+  Serial.print("Curr co2:");
+  Serial.println(co2);
+  Serial.print("Avg co2:");
+  Serial.println(co2_avg);
+  Serial.println("........................");
 
   if (index1 >= READINGS)
   {
