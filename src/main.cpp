@@ -11,7 +11,7 @@
 //#include <OneWire.h>
 //#include <DallasTemperature.h>
 
-#define READINGS 10                // how many sensor readings
+#define READINGS 10               // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP 60          // Sleep time
 
@@ -46,15 +46,59 @@ uint16_t error;
 SGP30 SGP30_1; // create an object of the SGP30 class
 SensirionI2CScd4x scd4x;
 
+void error_handler(void) // implement -> inform server about issue
+{
+  Serial.flush();
+  esp_deep_sleep_start(); // sleep forever
+}
+
+uint16_t sensor_begin(void)
+{
+  uint16_t serial0;
+  uint16_t serial1;
+  uint16_t serial2;
+  uint16_t value;
+
+  scd4x.begin(Wire);
+
+  error = scd4x.stopPeriodicMeasurement();
+  if (error)
+  {
+    return error;
+  }
+
+  error = scd4x.performSelfTest(value);
+  if (error)
+  {
+    return error;
+  }
+  if (value != 0)
+  {
+    return 1;
+  }
+
+  error = scd4x.getSerialNumber(serial0, serial1, serial2);
+  if (error)
+  {
+    return error;
+  }
+  // print serialNumber
+
+  error = scd4x.startLowPowerPeriodicMeasurement();
+  if (error)
+  {
+    return error;
+  }
+
+  delay(31000); // wait for first measurement
+  return 0;
+}
+
 void Network()
 {
   WiFi.disconnect(true, true); // delete AP before connecting again
   delay(1000);
   WiFi.begin(ssid, password);
-
-  // WiFi.onEvent(Wifi_connected,SYSTEM_EVENT_STA_CONNECTED);
-  // WiFi.onEvent(Get_IPAddress, SYSTEM_EVENT_STA_GOT_IP);
-  // WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED);
 
   delay(1000);
   while (WiFi.status() != WL_CONNECTED)
@@ -75,40 +119,23 @@ void setup()
 
   Wire.begin();
   Network();
-  Serial.begin(9600); // serial for debug
-  scd4x.begin(Wire);
-
-  // stop potentially previously started measurement
-  error = scd4x.stopPeriodicMeasurement();
-  if (error)
+  // Serial.begin(9600); // serial for debug
+  if (sensor_begin())
   {
-    Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+    error_handler();
+    // implement reset for SCD4x
   }
-
-  uint16_t serial0;
-  uint16_t serial1;
-  uint16_t serial2;
-
-  error = scd4x.getSerialNumber(serial0, serial1, serial2);
-  while (error)
-  {
-    Serial.print("Error trying to execute getSerialNumber(): ");
-    Serial.println(error);
-    delay(1000);
-  }
-  
-  //error = scd4x.startLowPowerPeriodicMeasurement();
-  error = scd4x.startPeriodicMeasurement();
-  delay(310); // wait for measurements
-  // sensors.requestTemperatures();
-  // temp = sensors.getTempCByIndex(0);
 
   error = scd4x.readMeasurement(co2, temp, humi);
 
-  while (error)
+  if (error || co2 == 0) // read again if reading is invalid or error is returned
   {
-    Serial.println("SCD4x error");
-    delay(1000);
+    delay(31000);
+    error = scd4x.readMeasurement(co2, temp, humi);
+    if (error)
+    {
+      error_handler();
+    }
   }
 
   if (SGP30_1.begin())
@@ -135,9 +162,11 @@ void setup()
   digitalWrite(27, LOW);
 }
 
+// sensors.requestTemperatures();
+// temp = sensors.getTempCByIndex(0);
+
 void loop()
 {
-
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   Serial.flush();
   delay(2000);
@@ -147,9 +176,14 @@ void loop()
   // temp = sensors.getTempCByIndex(0);
   error = scd4x.readMeasurement(co2, temp, humi);
 
-  while (error)
+  if (error || co2 == 0) // read again if reading is invalid or error is returned
   {
-    Serial.println("SCD4x error");
+    delay(31000);
+    error = scd4x.readMeasurement(co2, temp, humi);
+    if (error)
+    {
+      error_handler();
+    }
   }
 
   if (SGP30_ok)
@@ -182,6 +216,7 @@ void loop()
   humi_avg = humi_total / READINGS;
   co2_avg = co2_total / READINGS;
 
+  /*
   Serial.println("........................");
   Serial.print("Curr temp:");
   Serial.println(temp);
@@ -198,6 +233,7 @@ void loop()
   Serial.print("Avg co2:");
   Serial.println(co2_avg);
   Serial.println("........................");
+  */
 
   if (index1 >= READINGS)
   {
