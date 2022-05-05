@@ -103,8 +103,6 @@ uint16_t sensor_begin(void)
 void Network()
 {
   uint8_t concounter = 0;
-  // WiFi.mode(WIFI_STA);
-  // WiFi.disconnect();
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED && concounter < 8)
   {
@@ -115,6 +113,7 @@ void Network()
 
   if (WiFi.status() != WL_CONNECTED)
   {
+    //try connecting again
     WiFi.disconnect(true, true);
     delay(1000);
     WiFi.begin(ssid, password);
@@ -143,7 +142,6 @@ void setup()
   digitalWrite(27, LOW);
 
   Serial.begin(9600); // serial for debug
-  Serial.println("Im here");
 
   Wire.begin();
   Network();
