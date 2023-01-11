@@ -1,12 +1,13 @@
-#include <Arduino.h>
+#include "Arduino.h"
 #include <WiFi.h>
-//#include <esp_wifi.h>
+#include <WiFiClientSecure.h>
+
 #include <HTTPClient.h>
 #include "SensirionI2CScd4x.h"
 //#include "SparkFun_SGP30_Arduino_Library.h"
 
 #include <Wire.h>
-#include "password.h"
+
 //#include "password_example.h" //uncomment this and comment the above line
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -15,7 +16,7 @@
 #define RED_LED_PIN 26
 #define GREEN_LED_PIN 27
 
-#define READINGS 10                // how many sensor readings
+#define READINGS 10               // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP 60           // Sleep time
 
@@ -138,7 +139,7 @@ void Network()
     }
   }
 
-  Serial.print("Connected to:");
+  Serial.print("got IP:");
   Serial.println(WiFi.localIP());
 }
 
@@ -148,8 +149,6 @@ void setup()
   pinMode(BLUE_LED_PIN, OUTPUT); 
   pinMode(RED_LED_PIN, OUTPUT); 
   pinMode(GREEN_LED_PIN, OUTPUT); 
-
-  blinkOnBoardLed(GREEN_LED_PIN, 1, 1000);
 
   Serial.begin(9600); // serial for debug
 
@@ -198,13 +197,14 @@ void setup()
     co2_readings_arr[i] = co2;
     // tvoc_readings_arr[i] = 0;
   }
+  blinkOnBoardLed(BLUE_LED_PIN, 2, 500);
 }
 
 void loop()
 {
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   Serial.flush();
-  delay(100);
+  delay(50);
   esp_light_sleep_start();
 
   sensors.requestTemperatures();
@@ -233,7 +233,7 @@ void loop()
     tvoc_avg = tvoc_total / READINGS;
   }
   */
-
+  
   temperature_total = temperature_total - temperature_readings_arr[index1];
   temperature_readings_arr[index1] = temperature;
   temperature_total = temperature_total + temperature_readings_arr[index1];
@@ -252,17 +252,17 @@ void loop()
   temperature_avg = temperature_total / READINGS;
   humidity_avg = humidity_total / READINGS;
   co2_avg = co2_total / READINGS;
+  
 
   if (index1 >= READINGS)
   {
     Network(); // connect to wifi after sleep
+
     // Check WiFi connection status
     if (WiFi.status() == WL_CONNECTED)
     {
-
-      WiFiClient client;
+      WiFiClientSecure client;
       HTTPClient http;
-      digitalWrite(25, HIGH);
 
       // Domain name with URL path or IP address with path
       http.begin(client, serverName);
@@ -271,7 +271,7 @@ void loop()
       http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
       // Prepare HTTP POST data
-      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temperature_avg) + "&humidity=" + String(humidity) + "&co2=" + String(co2_avg) + "&tvoc=" + String(temperature2) + "";
+      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temperature_avg) + "&humidity=" + String(humidity_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(temperature2) + "";
 
       // Send HTTP POST request
       int httpResponseCode = http.POST(httpRequestData);
@@ -289,7 +289,6 @@ void loop()
       // Free resources
       http.end();
       WiFi.disconnect(true, true); //disconnect wifi after posting data
-      digitalWrite(25, LOW);
     }
     index1 = 0;
   }
