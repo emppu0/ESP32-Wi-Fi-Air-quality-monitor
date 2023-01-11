@@ -11,21 +11,25 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#define BLUE_LED_PIN 25
+#define RED_LED_PIN 26
+#define GREEN_LED_PIN 27
+
 #define READINGS 10                // how many sensor readings
 #define uS_TO_S_FACTOR 1000000ULL // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP 60           // Sleep time
 
 uint8_t index1 = 0;
-float temp;
-float temp2;
-float temp_readings_arr[READINGS];
-float temp_avg = 0;
-float temp_total;
+float temperature;
+float temperature2;
+float temperature_readings_arr[READINGS];
+float temperature_avg = 0;
+float temperature_total;
 
-float humi;
-float humi_readings_arr[READINGS];
-float humi_avg = 0;
-float humi_total;
+float humidity;
+float humidity_readings_arr[READINGS];
+float humidity_avg = 0;
+float humidity_total;
 
 uint16_t co2 = 0;
 uint16_t co2_readings_arr[READINGS];
@@ -45,12 +49,22 @@ uint16_t error;
 const int oneWireBus = 5; // input pin for ds18b20, tempsens1
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
-#define SENSOR_RESOLUTION 12 // sensor resolution
+#define SENSOR_RESOLUTION 12 // sensor resolution in bits
 
 // SGP30 SGP30_1; // create an object of the SGP30 class
 SensirionI2CScd4x scd4x;
 
-void error_handler(void) // implement -> inform server about issue
+void blinkOnBoardLed(uint8_t pin, uint8_t howManyBlinks, uint16_t blinkDelay)
+{
+  for (int i = 0; i < howManyBlinks; i++)
+  {
+    digitalWrite(pin, HIGH);
+    delay(blinkDelay);
+    digitalWrite(pin, LOW);
+  }
+}
+
+void error_handler(void) // implement better error handler :)
 {
   Serial.flush();
   // ESP.restart();
@@ -102,13 +116,13 @@ uint16_t sensor_begin(void)
 //
 void Network()
 {
-  uint8_t concounter = 0;
+  uint8_t connectionCounter = 0;
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED && concounter < 8)
+  while (WiFi.status() != WL_CONNECTED && connectionCounter < 8)
   {
     delay(500);
     Serial.println("...");
-    concounter++;
+    connectionCounter++;
   }
 
   if (WiFi.status() != WL_CONNECTED)
@@ -117,13 +131,11 @@ void Network()
     WiFi.disconnect(true, true);
     delay(1000);
     WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
+    delay(1000);
+    if (WiFi.status() != WL_CONNECTED)
     {
-      delay(500);
-      Serial.println("...");
+      ESP.restart();
     }
-    // Serial.println("Restarting, cannot connect to WiFI");
-    // ESP.restart();
   }
 
   Serial.print("Connected to:");
@@ -132,14 +144,12 @@ void Network()
 
 void setup()
 {
-  pinMode(25, OUTPUT); // status led blue
-  pinMode(26, OUTPUT); // status led red
-  pinMode(27, OUTPUT); // status led green
+  //set pinouts for rgb led
+  pinMode(BLUE_LED_PIN, OUTPUT); 
+  pinMode(RED_LED_PIN, OUTPUT); 
+  pinMode(GREEN_LED_PIN, OUTPUT); 
 
-  
-  digitalWrite(27, HIGH);
-  delay(1000);
-  digitalWrite(27, LOW);
+  blinkOnBoardLed(GREEN_LED_PIN, 1, 1000);
 
   Serial.begin(9600); // serial for debug
 
@@ -152,12 +162,12 @@ void setup()
     // implement reset for SCD4x
   }
 
-  error = scd4x.readMeasurement(co2, temp2, humi);
+  error = scd4x.readMeasurement(co2, temperature2, humidity);
 
   if (error || co2 == 0) // read again if reading is invalid or error is returned
   {
     delay(31000);
-    error = scd4x.readMeasurement(co2, temp, humi);
+    error = scd4x.readMeasurement(co2, temperature2, humidity);
     if (error)
     {
       error_handler();
@@ -166,7 +176,7 @@ void setup()
 
   sensors.begin();
   sensors.requestTemperatures();
-  temp = sensors.getTempCByIndex(0);
+  temperature = sensors.getTempCByIndex(0); //read temperature from ds18b20
 
   /*
   if (SGP30_1.begin())
@@ -177,25 +187,17 @@ void setup()
   }
   */
 
-  temp_total = temp * READINGS;
-  humi_total = humi * READINGS;
+  temperature_total = temperature * READINGS;
+  humidity_total = humidity * READINGS;
   co2_total = co2 * READINGS;
 
   for (int i = 0; i < READINGS; i++)
   { // initialize arrays with current sensor values
-    temp_readings_arr[i] = temp;
-    humi_readings_arr[i] = humi;
+    temperature_readings_arr[i] = temperature;
+    humidity_readings_arr[i] = humidity;
     co2_readings_arr[i] = co2;
     // tvoc_readings_arr[i] = 0;
   }
-
-  digitalWrite(27, HIGH);
-  delay(500);
-  digitalWrite(27, LOW);
-  delay(500);
-  digitalWrite(27, HIGH);
-  delay(500);
-  digitalWrite(27, LOW);
 }
 
 void loop()
@@ -206,13 +208,13 @@ void loop()
   esp_light_sleep_start();
 
   sensors.requestTemperatures();
-  temp = sensors.getTempCByIndex(0);
-  error = scd4x.readMeasurement(co2, temp2, humi);
+  temperature = sensors.getTempCByIndex(0);
+  error = scd4x.readMeasurement(co2, temperature2, humidity);
 
   if (error) // read again if reading is invalid or error is returned
   {
     delay(31000);
-    error = scd4x.readMeasurement(co2, temp2, humi);
+    error = scd4x.readMeasurement(co2, temperature2, humidity); //temperature from scd4x not used, too inaccurate
     if (error)
     {
       error_handler();
@@ -232,13 +234,13 @@ void loop()
   }
   */
 
-  temp_total = temp_total - temp_readings_arr[index1];
-  temp_readings_arr[index1] = temp;
-  temp_total = temp_total + temp_readings_arr[index1];
+  temperature_total = temperature_total - temperature_readings_arr[index1];
+  temperature_readings_arr[index1] = temperature;
+  temperature_total = temperature_total + temperature_readings_arr[index1];
 
-  humi_total = humi_total - humi_readings_arr[index1];
-  humi_readings_arr[index1] = humi;
-  humi_total = humi_total + humi_readings_arr[index1];
+  humidity_total = humidity_total - humidity_readings_arr[index1];
+  humidity_readings_arr[index1] = humidity;
+  humidity_total = humidity_total + humidity_readings_arr[index1];
 
   co2_total = co2_total - co2_readings_arr[index1];
   co2_readings_arr[index1] = co2;
@@ -247,28 +249,9 @@ void loop()
   index1++;
 
   // calculate avg:
-  temp_avg = temp_total / READINGS;
-  humi_avg = humi_total / READINGS;
+  temperature_avg = temperature_total / READINGS;
+  humidity_avg = humidity_total / READINGS;
   co2_avg = co2_total / READINGS;
-
-  /*
-  Serial.println("........................");
-  Serial.print("Curr temp:");
-  Serial.println(temp);
-  Serial.print("Avg temp:");
-  Serial.println(temp_avg);
-  Serial.println("........................");
-  Serial.print("Curr humi:");
-  Serial.println(humi);
-  Serial.print("Avg humi:");
-  Serial.println(humi_avg);
-  Serial.println("........................");
-  Serial.print("Curr co2:");
-  Serial.println(co2);
-  Serial.print("Avg co2:");
-  Serial.println(co2_avg);
-  Serial.println("........................");
-  */
 
   if (index1 >= READINGS)
   {
@@ -288,9 +271,7 @@ void loop()
       http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
       // Prepare HTTP POST data
-
-      // String httpRequestData = "api_key=" + apiKeyValue + "temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(tvoc_avg) + "";
-      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temp_avg) + "&humidity=" + String(humi_avg) + "&co2=" + String(co2_avg) + "&tvoc=" + String(co2) + "";
+      String httpRequestData = "api_key=" + apiKeyValue + "&temperature=" + String(temperature_avg) + "&humidity=" + String(humidity) + "&co2=" + String(co2_avg) + "&tvoc=" + String(temperature2) + "";
 
       // Send HTTP POST request
       int httpResponseCode = http.POST(httpRequestData);
