@@ -1,3 +1,8 @@
 # ESP32-Wi-Fi-Air-quality-monitor
-Air quality monitor with ESP32, SCD4x CO2 Sensor and DS18B20 temperature sensor. Sends averaged sensor data over Wi-Fi. This data is then stored in a MariaDB database.
-Results can be monitored from a website made with expressjs framework (in progress).  
+Portable usb powered air quality monitor with accurate co2 monitoring.
+
+## Features
+- Supports fully encrypted data transfer
+- Accurate co2 monitoring with a sensirion co2 sensor
+- Accurate temperature monitoring with a DS18B20 sensor
+-Results can be monitored from a website made with expressjs framework (in progress).  
